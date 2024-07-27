@@ -3,22 +3,15 @@
           Licensing information can be found at the end of the file.
 ------------------------------------------------------------------------------
 
-cpthread.h
-Base on thread.h - v0.3.1 - Cross platform threading functions for C/C++.
+thread.h - v0.3 - Cross platform threading functions for C/C++.
+
+Do this:
+    #define THREAD_IMPLEMENTATION
+before you include this file in *one* C/C++ file to create the implementation.
 */
 
-#ifndef CPTHREAD_H
-#define CPTHREAD_H
-
-#if defined(UNIX) || defined(__unix__)
-#    include <pthread.h>
-#    include <stdint.h>
-#    include <errno.h>
-#elif defined(_WIN32)
-#    include <Windows.h>
-#endif /* Platform-specific includes */
-
-#include <string.h>
+#ifndef thread_h
+#define thread_h
 
 #ifndef THREAD_U64
     #define THREAD_U64 unsigned long long
@@ -35,9 +28,10 @@ void thread_set_high_priority( void );
 void thread_exit( int return_code );
 
 typedef void* thread_ptr_t;
-thread_ptr_t thread_create( int (*thread_proc)( void* ), void* user_data, char const* name, int stack_size );
+thread_ptr_t thread_create( int (*thread_proc)( void* ), void* user_data, int stack_size );
 void thread_destroy( thread_ptr_t thread );
 int thread_join( thread_ptr_t thread );
+int thread_detach( thread_ptr_t thread );
 
 typedef union thread_mutex_t thread_mutex_t;
 void thread_mutex_init( thread_mutex_t* mutex );
@@ -85,57 +79,18 @@ int thread_queue_produce( thread_queue_t* queue, void* value, int timeout_ms );
 void* thread_queue_consume( thread_queue_t* queue, int timeout_ms );
 int thread_queue_count( thread_queue_t* queue );
 
+#endif /* thread_h */
 
-union thread_mutex_t
-{
-    void* align;
-    char data[ 64 ];
-};
-
-union thread_signal_t
-{
-    void* align;
-    char data[ 116 ];
-};
-
-union thread_atomic_int_t
-{
-    void* align;
-    long i;
-};
-
-union thread_atomic_ptr_t
-{
-    void* ptr;
-};
-
-union thread_timer_t
-{
-    void* data;
-    char d[ 8 ];
-};
-
-struct thread_queue_t
-{
-    thread_signal_t data_ready;
-    thread_signal_t space_open;
-    thread_atomic_int_t count;
-    thread_atomic_int_t head;
-    thread_atomic_int_t tail;
-    void** values;
-    int size;
-#ifndef NDEBUG
-    thread_atomic_int_t id_produce_is_set;
-    thread_id_t id_produce;
-    thread_atomic_int_t id_consume_is_set;
-    thread_id_t id_consume;
-#endif
-};
 
 /**
 
+thread.h 
+========
+
+Cross platform threading functions for C/C++.
+
 Example
-=======
+-------
 
 Here's a basic sample program which starts a second thread which just waits and prints a message.
 
@@ -144,29 +99,24 @@ Here's a basic sample program which starts a second thread which just waits and 
 
     #include <stdio.h> // for printf
     
-    int thread_proc( void* user_data)
-        {
+    int thread_proc( void* user_data) {
         thread_timer_t timer;
         thread_timer_init( &timer );
 
         int count = 0;
         thread_atomic_int_t* exit_flag = (thread_atomic_int_t*) user_data;
-        while( thread_atomic_int_load( exit_flag ) == 0 )
-            {
+        while( thread_atomic_int_load( exit_flag ) == 0 ) {
             printf( "Thread... " );
             thread_timer_wait( &timer, 1000000000 ); // sleep for a second
             ++count;
-            }
+        }
 
         thread_timer_term( &timer );
         printf( "Done\n" );
         return count;
-        }
+    }
 
-    int main( int argc, char** argv )
-        {
-        (void) argc, argv;
-        
+    int main( int argc, char** argv ) {        
         thread_atomic_int_t exit_flag;
         thread_atomic_int_store( &exit_flag, 0 );
 
@@ -174,11 +124,10 @@ Here's a basic sample program which starts a second thread which just waits and 
 
         thread_timer_t timer;
         thread_timer_init( &timer );
-        for( int i = 0; i < 5; ++i )
-            {
+        for( int i = 0; i < 5; ++i ) {
             printf( "Main... " );
             thread_timer_wait( &timer, 2000000000 ); // sleep for two seconds
-            }
+        }
         thread_timer_term( &timer );
         
         thread_atomic_int_store( &exit_flag, 1 ); // signal thread to exit
@@ -188,19 +137,19 @@ Here's a basic sample program which starts a second thread which just waits and 
 
         thread_destroy( thread );
         return retval;
-        }
+    }
 
 
 API Documentation
-=================
+-----------------
 
 thread.h is a single-header library, and does not need any .lib files or other binaries, or any build scripts. To use it,
 you just include thread.h to get the API declarations. To get the definitions, you must include thread.h from *one* 
 single C or C++ file, and #define the symbol `THREAD_IMPLEMENTATION` before you do. 
 
 
-Customization
--------------
+### Customization
+
 thread.h allows for specifying the exact type of 64-bit unsigned integer to be used in its API. By default, it is 
 defined as `unsigned long long`, but as this is not a standard type on all compilers, you can redefine it by #defining 
 THREAD_U64 before including thread.h. This is useful if you, for example, use the types from `<stdint.h>` in the rest of 
@@ -253,14 +202,13 @@ Exits the calling thread, as if you had done `return return_code;` from the main
 thread_create
 -------------
 
-    thread_ptr_t thread_create( int (*thread_proc)( void* ), void* user_data, char const* name, int stack_size )
+    thread_ptr_t thread_create( int (*thread_proc)( void* ), void* user_data, int stack_size )
 
-Creates a new thread running the `thread_proc` function, passing the `user_data` through to it. The thread will be 
-given the debug name given in the `name` parameter, if supported on the platform, and it will have the stack size
-specified in the `stack_size` parameter. To get the operating system default stack size, use the defined constant
-`THREAD_STACK_SIZE_DEFAULT`. When returning from the thread_proc function, the value you return can be received in
-another thread by calling thread_join. `thread_create` returns a pointer to the thread instance, which can be used 
-as a parameter to the functions `thread_destroy` and `thread_join`.
+Creates a new thread running the `thread_proc` function, passing the `user_data` through to it. The thread will have 
+the stack size specified in the `stack_size` parameter. To get the operating system default stack size, use the 
+defined constant `THREAD_STACK_SIZE_DEFAULT`. When returning from the thread_proc function, the value you return can 
+be received in another thread by calling thread_join. `thread_create` returns a pointer to the thread instance, which 
+can be used as a parameter to the functions `thread_destroy` and `thread_join`.
 
 
 thread_destroy
@@ -281,6 +229,15 @@ thread_join
 Waits for the specified thread to exit. Returns the value which the thread returned when exiting.
 
 
+thread_detach
+-------------
+
+    int thread_detach( thread_ptr_t thread )
+
+Marks the thread as detached. When a detached thread terminates, its resources are automatically released back to the
+system without the need for another thread to join with the terminated thread.
+    
+    
 thread_mutex_init
 -----------------
     
@@ -563,71 +520,4 @@ thread_queue_count
 Returns the number of elements currently held in a single-producer/single-consumer queue. Be aware that by the time you
 get the count, it might have changed by another thread calling consume or produce, so use with care.
 
-**/
-
-
-#endif /* CPTHREAD_H */
-
-/*
-revision history:
-    0.3.1   Adapted into two files + added includes.
-    0.3     set_high_priority API change. Fixed spurious wakeup bug in signal. Added 
-            timeout param to queue produce/consume. Various cleanup and trivial fixes.
-    0.2     first publicly released version 
-*/
-
-/*
-------------------------------------------------------------------------------
-
-This software is available under 2 licenses - you may choose the one you like.
-
-------------------------------------------------------------------------------
-
-ALTERNATIVE A - MIT License
-
-Copyright (c) 2015 Mattias Gustavsson
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of 
-this software and associated documentation files (the "Software"), to deal in 
-the Software without restriction, including without limitation the rights to 
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies 
-of the Software, and to permit persons to whom the Software is furnished to do 
-so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all 
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
-SOFTWARE.
-
-------------------------------------------------------------------------------
-
-ALTERNATIVE B - Public Domain (www.unlicense.org)
-
-This is free and unencumbered software released into the public domain.
-
-Anyone is free to copy, modify, publish, use, compile, sell, or distribute this 
-software, either in source code form or as a compiled binary, for any purpose, 
-commercial or non-commercial, and by any means.
-
-In jurisdictions that recognize copyright laws, the author or authors of this 
-software dedicate any and all copyright interest in the software to the public 
-domain. We make this dedication for the benefit of the public at large and to 
-the detriment of our heirs and successors. We intend this dedication to be an 
-overt act of relinquishment in perpetuity of all present and future rights to 
-this software under copyright law.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN 
-ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION 
-WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-------------------------------------------------------------------------------
 */
