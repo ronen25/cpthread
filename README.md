@@ -1,13 +1,13 @@
 # cpthread
-A two-file version of Mattias Gustavsson's incredibly useful [single header libraries](https://github.com/mattiasgustavsson/libs),
-with proper cross-platform includes.
+A two-file version of Mattias Gustavsson's incredibly useful [single header libraries](https://github.com/mattiasgustavsson/libs).
 
 ## License
 This software is available under 2 licenses - you may choose the one you like.
 
 ALTERNATIVE A - MIT License
 
-Copyright (c) 2015 Mattias Gustavsson
+Copyright (c) 2018-2024 Ronen Lapushner
+Copyright (c) 2015-2024 Mattias Gustavsson
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of 
 this software and associated documentation files (the "Software"), to deal in 
